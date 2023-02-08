@@ -2,9 +2,11 @@
 ui_print ""
 
 if [ $ARCH = "arm" ]; then
-	alias cmpr='$MODPATH/bin/arm/cmpr'
+	#arm
 	ARCH_LIB=armeabi-v7a
-elif [ $ARCH = "arm64" ] || [ $ARCH = "x64" ]; then
+	alias cmpr='$MODPATH/bin/arm/cmpr'
+elif [ $ARCH = "arm64" ]; then
+	#arm64
 	ARCH_LIB=arm64-v8a
 	alias cmpr='$MODPATH/bin/arm64/cmpr'
 else
@@ -12,10 +14,11 @@ else
 fi
 set_perm_recursive $MODPATH/bin 0 0 0755 0777
 
-grep __PKGNAME /proc/self/mountinfo | while read -r line; do
+grep __PKGNAME /proc/mounts | while read -r line; do
 	ui_print "* Un-mount"
-	mountpoint=$(echo "$line" | cut -d' ' -f5)
-	umount -l "${mountpoint%%\\*}"
+	mp=${line#* }
+	mp=${mp%% *}
+	umount -l ${mp%%\\*}
 done
 am force-stop __PKGNAME
 
@@ -47,7 +50,8 @@ fi
 BASEPATHLIB=${BASEPATH%base.apk}lib/${ARCH}
 if [ -z "$(ls -A1 ${BASEPATHLIB})" ]; then
 	ui_print "* Extracting native libs"
-	if ! op=$(unzip -j $MODPATH/__PKGNAME.apk lib/${ARCH_LIB}/* -d ${BASEPATHLIB} 2>&1); then
+	mkdir -p $BASEPATHLIB
+	if ! op=$(unzip -j $MODPATH/__EXTRCT lib/${ARCH_LIB}/* -d ${BASEPATHLIB} 2>&1); then
 		ui_print "ERROR: extracting native libs failed"
 		abort "$op"
 	fi
@@ -57,8 +61,9 @@ ui_print "* Setting Permissions"
 set_perm $MODPATH/base.apk 1000 1000 644 u:object_r:apk_data_file:s0
 
 ui_print "* Mounting __PKGNAME"
-RVPATH=/data/adb/__PKGNAME_rv.apk
-ln -f $MODPATH/base.apk $RVPATH
+mkdir $NVBASE/rvhc 2>/dev/null
+RVPATH=$NVBASE/rvhc/__PKGNAME_rv.apk
+mv -f $MODPATH/base.apk $RVPATH
 
 if ! op=$(su -Mc mount -o bind $RVPATH $BASEPATH 2>&1); then
 	ui_print "ERROR: Mount failed!"
@@ -69,7 +74,7 @@ am force-stop __PKGNAME
 ui_print "* Optimizing __PKGNAME"
 cmd package compile --reset __PKGNAME &
 
-rm -r $MODPATH/bin $MODPATH/__PKGNAME.apk
+rm -rf $MODPATH/bin $MODPATH/__PKGNAME.apk $NVBASE/__PKGNAME_rv.apk
 
 ui_print "* Done"
 ui_print "  by j-hc (github.com/j-hc)"
